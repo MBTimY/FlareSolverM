@@ -1,6 +1,7 @@
 import logging
 import sys
 import time
+import json
 from urllib.parse import unquote
 
 from func_timeout import func_timeout, FunctionTimedOut
@@ -80,7 +81,7 @@ def health_endpoint() -> HealthResponse:
 
 def controller_v1_endpoint(req: V1RequestBase) -> V1ResponseBase:
     start_ts = int(time.time() * 1000)
-    logging.info(f"Incoming request => POST /v1 body: {utils.object_to_dict(req)}")
+    logging.debug(f"Incoming request => POST /v1 body: {utils.object_to_dict(req)}")
     res: V1ResponseBase
     try:
         res = _controller_v1_handler(req)
@@ -227,15 +228,26 @@ def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> Challenge
 
     # navigate to the page
     logging.debug(f'Navigating to... {req.url}')
+    logging.debug(f'launch_url is...:  {req.launch_url}')
+
+    if req.launch_url:
+        driver.get(req.launch_url)
+        logging.info(f'launch_url is...:  {req.cookies}')
+        if req.cookies:
+            for cookie in req.cookies:
+                driver.add_cookie(cookie)
+
     if method == 'POST':
         _post_request(req, driver)
     else:
         driver.get(req.url)
+
     if utils.get_config_log_html():
         logging.debug(f"Response HTML:\n{driver.page_source}")
 
     # wait for the page
     html_element = driver.find_element(By.TAG_NAME, "html")
+
     page_title = driver.title
 
     # find access denied titles
@@ -322,31 +334,57 @@ def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> Challenge
 
 
 def _post_request(req: V1RequestBase, driver: WebDriver):
-    post_form = f'<form id="hackForm" action="{req.url}" method="POST">'
-    query_string = req.postData if req.postData[0] != '?' else req.postData[1:]
-    pairs = query_string.split('&')
-    for pair in pairs:
-        parts = pair.split('=')
-        # noinspection PyBroadException
-        try:
-            name = unquote(parts[0])
-        except Exception:
-            name = parts[0]
-        if name == 'submit':
-            continue
-        # noinspection PyBroadException
-        try:
-            value = unquote(parts[1])
-        except Exception:
-            value = parts[1]
-        post_form += f'<input type="text" name="{name}" value="{value}"><br>'
-    post_form += '</form>'
-    html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <body>
-            {post_form}
-            <script>document.getElementById('hackForm').submit();</script>
-        </body>
-        </html>"""
-    driver.get("data:text/html;charset=utf-8," + html_content)
+    # post_form = f'<form id="hackForm" action="{req.url}" method="POST">'
+    # query_string = req.postData if req.postData[0] != '?' else req.postData[1:]
+    # pairs = query_string.split('&')
+    # for pair in pairs:
+    #     parts = pair.split('=')
+    #     # noinspection PyBroadException
+    #     try:
+    #         name = unquote(parts[0])
+    #     except Exception:
+    #         name = parts[0]
+    #     if name == 'submit':
+    #         continue
+    #     # noinspection PyBroadException
+    #     try:
+    #         value = unquote(parts[1])
+    #     except Exception:
+    #         value = parts[1]
+    #     post_form += f'<input type="text" name="{name}" value="{value}"><br>'
+    # post_form += '</form>'
+    # html_content = f"""
+    #     <!DOCTYPE html>
+    #     <html>
+    #     <body>
+    #         {post_form}
+    #         <script>document.getElementById('hackForm').submit();</script>
+    #     </body>
+    #     </html>"""
+    # driver.get("data:text/html;charset=utf-8," + html_content)
+
+    if req.postData:
+
+        headers = {
+          "accept": "*/*",
+          "content-type": "application/json"
+        }
+
+        fetch_template = f'''
+          var data = {json.dumps(req.postData)};
+          var headers = {json.dumps(headers)};
+          var result = await fetch("{req.url}", {{
+          "headers":headers,
+          "referrerPolicy": "strict-origin-when-cross-origin",
+          "body": JSON.stringify(data),
+          "method": "POST",
+          "credentials": "include"
+          }});
+          
+          var content = await result.text();
+          document.documentElement.innerHTML = "<html><head></head><body><pre>"+content+"</pre></body></html>"
+        '''
+        # time.sleep(20)
+        logging.debug('execute javascript: ' + fetch_template.replace("\n", "").strip())
+        driver.execute_script(fetch_template.replace("\n", "").strip())
+        # time.sleep(100)

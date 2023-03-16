@@ -40,17 +40,19 @@ def get_webdriver() -> WebDriver:
     # undetected_chromedriver
     options = uc.ChromeOptions()
     options.add_argument('--no-sandbox')
-    options.add_argument('--window-size=1920,1080')
+    options.add_argument('--window-size=800,600')
     # todo: this param shows a warning in chrome head-full
     options.add_argument('--disable-setuid-sandbox')
     options.add_argument('--disable-dev-shm-usage')
     # this option removes the zygote sandbox (it seems that the resolution is a bit faster)
     options.add_argument('--no-zygote')
+    # options.add_argument('--headless')
 
     # note: headless mode is detected (options.headless = True)
     # we launch the browser in head-full mode with the window hidden
     windows_headless = False
     if get_config_headless():
+        # windows_headless = True
         if os.name == 'nt':
             windows_headless = True
         else:
@@ -66,12 +68,18 @@ def get_webdriver() -> WebDriver:
         version_main = get_chrome_major_version()
         if PATCHED_DRIVER_PATH is not None:
             driver_exe_path = PATCHED_DRIVER_PATH
-
+    # print(f"Chrome version: {version_main}")
     # downloads and patches the chromedriver
     # if we don't set driver_executable_path it downloads, patches, and deletes the driver each time
+    # print('options', options)
+    # print('driver_executable_path', driver_exe_path)
+    # print('windows_headless', windows_headless)
     driver = uc.Chrome(options=options, driver_executable_path=driver_exe_path, version_main=version_main,
                        windows_headless=windows_headless)
+    
+    driver.set_window_size(600, 800)
 
+    # print('driver', driver)
     # save the patched driver to avoid re-downloads
     if driver_exe_path is None:
         PATCHED_DRIVER_PATH = os.path.join(driver.patcher.data_path, driver.patcher.exe_name)
@@ -169,7 +177,7 @@ def start_xvfb_display():
     global XVFB_DISPLAY
     if XVFB_DISPLAY is None:
         from xvfbwrapper import Xvfb
-        XVFB_DISPLAY = Xvfb()
+        XVFB_DISPLAY = Xvfb(width=0, height=0)
         XVFB_DISPLAY.start()
 
 

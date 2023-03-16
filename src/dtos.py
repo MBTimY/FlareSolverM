@@ -38,6 +38,7 @@ class V1RequestBase(object):
 
     # V1Request
     url: str = None
+    launch_url: str = None  # deprecated v2.0.0, not used
     postData: str = None
     returnOnlyCookies: bool = None
     download: bool = None   # deprecated v2.0.0, not used
